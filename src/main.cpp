@@ -4,30 +4,49 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include "json.hpp"
+#include "objects.h"
+#include "def.h"
 #include <SDL.h>
 
-// has to be lower than image_... and pair
-#define IMAGE_WIDTH 1000
-#define IMAGE_HEIGHT 1000
+using json = nlohmann::json;
 
-#define RATIO 4
+/* 
+    PIXEL ARRAY
+ */
+uint8_t pixels[(int)IMAGE_WIDTH * (int)IMAGE_HEIGHT * 3];
 
-#define WIDTH IMAGE_WIDTH/RATIO
-#define HEIGHT IMAGE_HEIGHT/RATIO
-
-uint8_t pixels[IMAGE_WIDTH *IMAGE_HEIGHT*3];
-
-void writePixels(uint8_t *image) {
-    std::ofstream ofs("./output/block.ppm", std::ios::out | std::ios::binary);
-    ofs << "P6\n" << WIDTH << " " << HEIGHT << "\n255\n";
-    for (unsigned i = 0; i < WIDTH * HEIGHT; ++i) {
-        ofs << image[i*3+0] <<
-            image[i*3+1] <<
-            image[i*3+2];
-    }
-    ofs.close();
+/* 
+    COLOR RELATED FUNCS
+ */
+int fromRGB(int color[]) {
+    return ((color[0] & 0xff) << 16) + ((color[1] & 0xff) << 8) + (color[2] & 0xff);
 }
 
+int *toRGB(int hexColor) {
+    int color[3];
+    color[0] = ((hexColor >> 16) & 0xFF) / 255.0;  // Extract the RR byte
+    color[1] = ((hexColor >> 8) & 0xFF) / 255.0;   // Extract the GG byte
+    color[2] = ((hexColor) & 0xFF) / 255.0;
+    return color;
+}
+
+int interpolate(int color1, int color2, float fraction) {
+    unsigned char   r1 = (color1 >> 16) & 0xff;
+    unsigned char   r2 = (color2 >> 16) & 0xff;
+    unsigned char   g1 = (color1 >> 8) & 0xff;
+    unsigned char   g2 = (color2 >> 8) & 0xff;
+    unsigned char   b1 = color1 & 0xff;
+    unsigned char   b2 = color2 & 0xff;
+
+    return (int) ((r2 - r1) * fraction + r1) << 16 |
+            (int) ((g2 - g1) * fraction + g1) << 8 |
+            (int) ((b2 - b1) * fraction + b1);
+}
+
+/* 
+    BOARD RELATED
+*/
 std::vector<std::vector<int>> initEmptyBoard() {
     std::vector<std::vector<int>> board;
 
@@ -42,16 +61,8 @@ std::vector<std::vector<int>> initEmptyBoard() {
     return  board;
 }
 
-std::vector<std::vector<int>> initFullBoard() {
-    std::vector<std::vector<int>> board;
-
-    for(int i = 0; i < WIDTH; i++) {
-        std::vector<int> subboard;
-        board.push_back(subboard);
-        for(int j = 0; j < HEIGHT-1; j++) {
-            board[i].push_back(0);
-        }
-    }
+std::vector<std::vector<int>> initRandomFullBoard() {
+    auto board = initEmptyBoard();
 
     for(int i = 1; i < WIDTH-2; i++) {
         for(int j = 1; j < HEIGHT-2; j++) {
@@ -64,6 +75,28 @@ std::vector<std::vector<int>> initFullBoard() {
     return  board;
 }
 
+std::vector<std::vector<int>> initFullBoard() {
+    auto board = initEmptyBoard();
+
+    std::ifstream ifs("src/config.json");
+    json config = json::parse(ifs);
+
+    for(int i = 0; i < config["objects"].size(); i++) {
+        if(config["objects"][i]["type"] == "glider") {
+            createGlider(board, config["objects"][i]["position"][0], config["objects"][i]["position"][1], config["objects"][i]["rotation"]);
+        } else if(config["objects"][i]["type"] == "LWSS") {
+            createLWSS(board, config["objects"][i]["position"][0], config["objects"][i]["position"][1], config["objects"][i]["rotation"]);
+        } else if(config["objects"][i]["type"] == "line") {
+            createLine(board, config["objects"][i]["position"][0], config["objects"][i]["position"][1], config["objects"][i]["length"], config["objects"][i]["rotation"]);
+        }
+    }
+
+    return  board;
+}
+
+/* 
+    STATE UPDATE FUNCTIONS
+*/
 int getState(
     int i1, int i2, int i3,
     int i4, int i5, int i6,
@@ -106,31 +139,6 @@ void updateBoard(std::vector<std::vector<int>> &oldBoard, std::vector<std::vecto
         }
     }
 };
-
-int fromRGB(int color[]) {
-    return ((color[0] & 0xff) << 16) + ((color[1] & 0xff) << 8) + (color[2] & 0xff);
-}
-
-int *toRGB(int hexColor) {
-    int color[3];
-    color[0] = ((hexColor >> 16) & 0xFF) / 255.0;  // Extract the RR byte
-    color[1] = ((hexColor >> 8) & 0xFF) / 255.0;   // Extract the GG byte
-    color[2] = ((hexColor) & 0xFF) / 255.0;
-    return color;
-}
-
-int interpolate(int color1, int color2, float fraction) {
-        unsigned char   r1 = (color1 >> 16) & 0xff;
-        unsigned char   r2 = (color2 >> 16) & 0xff;
-        unsigned char   g1 = (color1 >> 8) & 0xff;
-        unsigned char   g2 = (color2 >> 8) & 0xff;
-        unsigned char   b1 = color1 & 0xff;
-        unsigned char   b2 = color2 & 0xff;
-
-        return (int) ((r2 - r1) * fraction + r1) << 16 |
-                (int) ((g2 - g1) * fraction + g1) << 8 |
-                (int) ((b2 - b1) * fraction + b1);
-}
 
 void getPixels(std::vector<std::vector<int>> board) {
     int basecolor[3] = {233, 86, 252};
@@ -176,11 +184,17 @@ void getPixels(std::vector<std::vector<int>> board) {
 };
 
 int main(int argc, char **argv) {
+    /*
+        CREATE BOARD
+    */
     auto oldBoard = initFullBoard();
     auto newBoard = initEmptyBoard();
     bool quit = false;
     bool update = false;
 
+    /*
+        GAME LOOP
+    */
     SDL_Window* window = NULL;
 	SDL_Surface* screenSurface = NULL;
 	if( SDL_Init( SDL_INIT_VIDEO ) < 0 ) {printf( "SDL could not initialize! SDL_Error: %s\n", SDL_GetError() );}
@@ -246,13 +260,15 @@ int main(int argc, char **argv) {
                 );
                 SDL_BlitSurface(surf, NULL, screenSurface, NULL);
                 SDL_UpdateWindowSurface(window);
-                SDL_Delay(40);
+
+                if(update) {
+                    SDL_Delay(40);
+                }
             }
 			SDL_Delay(200);
 		}
 	}
 	SDL_DestroyWindow(window);
 	SDL_Quit();
-    /* writePixels(getPixels(board)); */
     return 0;
 }

@@ -1,0 +1,52 @@
+{
+    "objects": [
+        {
+            "type": "line",
+            "position": [101, 100],
+            "length": 100,
+            "rotation": 0
+        },
+        {
+            "type": "line",
+            "position": [102, 102],
+            "length": 100,
+            "rotation": 0
+        },
+        {
+            "type": "line",
+            "position": [103, 104],
+            "length": 100,
+            "rotation": 0
+        },
+        {
+            "type": "line",
+            "position": [104, 106],
+            "length": 100,
+            "rotation": 0
+        },
+        {
+            "type": "line",
+            "position": [105, 108],
+            "length": 100,
+            "rotation": 0
+        },
+        {
+            "type": "line",
+            "position": [106, 110],
+            "length": 100,
+            "rotation": 0
+        },
+        {
+            "type": "line",
+            "position": [107, 112],
+            "length": 100,
+            "rotation": 0
+        },
+        {
+            "type": "line",
+            "position": [108, 114],
+            "length": 100,
+            "rotation": 0
+        }
+    ]
+}
