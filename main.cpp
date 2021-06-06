@@ -7,8 +7,8 @@
 #include <SDL.h>
 
 // has to be lower than image_... and pair
-#define IMAGE_WIDTH 500
-#define IMAGE_HEIGHT 500
+#define IMAGE_WIDTH 1000
+#define IMAGE_HEIGHT 1000
 
 #define RATIO 4
 
@@ -107,32 +107,67 @@ void updateBoard(std::vector<std::vector<int>> &oldBoard, std::vector<std::vecto
     }
 };
 
-void getPixels(std::vector<std::vector<int>> board) {
-    int basecolor[3] = {219, 105, 39};
-    int endcolor[3] = {24, 50, 64};
+int fromRGB(int color[]) {
+    return ((color[0] & 0xff) << 16) + ((color[1] & 0xff) << 8) + (color[2] & 0xff);
+}
 
-    int change[3] = {(basecolor[0]-endcolor[0])/10, (basecolor[1]-endcolor[1])/10, (basecolor[2]-endcolor[2])/10};
+int *toRGB(int hexColor) {
+    int color[3];
+    color[0] = ((hexColor >> 16) & 0xFF) / 255.0;  // Extract the RR byte
+    color[1] = ((hexColor >> 8) & 0xFF) / 255.0;   // Extract the GG byte
+    color[2] = ((hexColor) & 0xFF) / 255.0;
+    return color;
+}
+
+int interpolate(int color1, int color2, float fraction) {
+        unsigned char   r1 = (color1 >> 16) & 0xff;
+        unsigned char   r2 = (color2 >> 16) & 0xff;
+        unsigned char   g1 = (color1 >> 8) & 0xff;
+        unsigned char   g2 = (color2 >> 8) & 0xff;
+        unsigned char   b1 = color1 & 0xff;
+        unsigned char   b2 = color2 & 0xff;
+
+        return (int) ((r2 - r1) * fraction + r1) << 16 |
+                (int) ((g2 - g1) * fraction + g1) << 8 |
+                (int) ((b2 - b1) * fraction + b1);
+}
+
+void getPixels(std::vector<std::vector<int>> board) {
+    int basecolor[3] = {233, 86, 252};
+    int endcolor[3] = {0, 0, 0};
+
+    int change[3] = {(basecolor[0]-endcolor[0])/20, (basecolor[1]-endcolor[1])/20, (basecolor[2]-endcolor[2])/20};
 
     for(int i = 0; i < WIDTH; i++) {
         for(int j = 0; j < HEIGHT; j++) {
-            for(int k = 0; k < RATIO; k++) {
-                for(int z = 0; z < RATIO; z++) {
-                    if (board[i][j] == 1) {
-                        pixels[((i*RATIO+k)*IMAGE_WIDTH+(j*RATIO+z))*3 + 0] = basecolor[0];
-                        pixels[((i*RATIO+k)*IMAGE_WIDTH+(j*RATIO+z))*3 + 1] = basecolor[1];
-                        pixels[((i*RATIO+k)*IMAGE_WIDTH+(j*RATIO+z))*3 + 2] = basecolor[2];
-                    } else if (
-                        (pixels[((i*RATIO+k)*IMAGE_WIDTH+(j*RATIO+z))*3 + 0] > change[0]) && 
-                        (pixels[((i*RATIO+k)*IMAGE_WIDTH+(j*RATIO+z))*3 + 1] > change[1]) && 
-                        (pixels[((i*RATIO+k)*IMAGE_WIDTH+(j*RATIO+z))*3 + 2] > change[2])
-                    ) {
-                        pixels[((i*RATIO+k)*IMAGE_WIDTH+(j*RATIO+z))*3 + 0] -= change[0];
-                        pixels[((i*RATIO+k)*IMAGE_WIDTH+(j*RATIO+z))*3 + 1] -= change[1];
-                        pixels[((i*RATIO+k)*IMAGE_WIDTH+(j*RATIO+z))*3 + 2] -= change[1];
-                    } else {
-                        pixels[((i*RATIO+k)*IMAGE_WIDTH+(j*RATIO+z))*3 + 0] = 0;
-                        pixels[((i*RATIO+k)*IMAGE_WIDTH+(j*RATIO+z))*3 + 1] = 0;
-                        pixels[((i*RATIO+k)*IMAGE_WIDTH+(j*RATIO+z))*3 + 2] = 0;
+            if (board[i][j] == 1) {
+                for(int k = 0; k < RATIO; k++) {
+                    for(int z = 0; z < RATIO; z++) {
+                        int pos = ((i*RATIO+k)*IMAGE_WIDTH+(j*RATIO+z))*3;
+                        pixels[pos + 0] = basecolor[0];
+                        pixels[pos + 1] = basecolor[1];
+                        pixels[pos + 2] = basecolor[2];
+                    }
+                }
+            } else {
+                for(int k = 0; k < RATIO; k++) {
+                    for(int z = 0; z < RATIO; z++) {
+                        int pos = ((i*RATIO+k)*IMAGE_WIDTH+(j*RATIO+z))*3;
+                        if (pixels[pos + 0] > change[0] && pixels[pos + 0] - change[0] >= 0) {
+                            pixels[pos + 0] -= change[0];
+                        } else {
+                            pixels[pos + 0] = 0;
+                        }
+                        if (pixels[pos + 1] > change[1] && pixels[pos + 1] - change[1] >= 0) {
+                            pixels[pos + 1] -= change[1];
+                        } else {
+                            pixels[pos + 1] = 0;
+                        }
+                        if (pixels[pos + 2] > change[2] && pixels[pos + 2] - change[2] >= 0) {
+                            pixels[pos + 2] -= change[2];
+                        } else {
+                            pixels[pos + 2] = 0;
+                        }
                     }
                 }
             }
@@ -211,7 +246,7 @@ int main(int argc, char **argv) {
                 );
                 SDL_BlitSurface(surf, NULL, screenSurface, NULL);
                 SDL_UpdateWindowSurface(window);
-                SDL_Delay(50);
+                SDL_Delay(40);
             }
 			SDL_Delay(200);
 		}
